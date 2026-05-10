@@ -146,33 +146,121 @@ func (s *Service) VerifyPrivyToken(privyToken string) (*Principal, string, error
 	if strings.TrimSpace(privyToken) == "" {
 		return nil, "", errors.New("privy_token is required")
 	}
-	if strings.TrimSpace(s.cfg.PrivyJWKSURL) == "" || strings.TrimSpace(s.cfg.PrivyAppID) == "" {
-		return nil, "", errors.New("PRIVY_JWKS_URL and PRIVY_APP_ID are required on backend")
+	if strings.TrimSpace(s.cfg.PrivyAppID) == "" {
+		return nil, "", errors.New("PRIVY_APP_ID is required on backend")
 	}
 
+	alg, err := jwtHeaderAlg(privyToken)
+	if err != nil {
+		return nil, "", errors.New("invalid privy token")
+	}
+
+	var claims *privyClaims
+	switch alg {
+	case jwt.SigningMethodES256.Alg():
+		claims, err = s.verifyPrivyES256Claims(privyToken)
+	case jwt.SigningMethodRS256.Alg():
+		if strings.TrimSpace(s.cfg.PrivyJWKSURL) == "" {
+			return nil, "", errors.New("PRIVY_JWKS_URL is required for RS256 Privy tokens")
+		}
+		claims, err = s.verifyPrivyRS256Claims(privyToken)
+	default:
+		return nil, "", fmt.Errorf("unsupported privy jwt alg %q (use ES256 with PRIVY_VERIFICATION_KEY or RS256 with PRIVY_JWKS_URL)", alg)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if err := validatePrivyClaims(claims, s.cfg.PrivyAppID, s.cfg.PrivyIssuer); err != nil {
+		return nil, "", err
+	}
+
+	return s.issueSession(context.Background(), claims.Sub, claims.WalletAddress, "privy")
+}
+
+func jwtHeaderAlg(tokenString string) (string, error) {
+	parts := strings.Split(strings.TrimSpace(tokenString), ".")
+	if len(parts) < 2 {
+		return "", errors.New("malformed jwt")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", err
+	}
+	var hdr map[string]any
+	if err := json.Unmarshal(raw, &hdr); err != nil {
+		return "", err
+	}
+	alg, _ := hdr["alg"].(string)
+	if alg == "" {
+		return "", errors.New("missing alg")
+	}
+	return alg, nil
+}
+
+func (s *Service) verifyPrivyES256Claims(tokenString string) (*privyClaims, error) {
+	pemStr := strings.TrimSpace(s.cfg.PrivyVerificationKey)
+	if pemStr == "" {
+		return nil, errors.New("PRIVY_VERIFICATION_KEY is required for Privy ES256 tokens (copy from Privy Dashboard → App settings → Verification key)")
+	}
+	key, err := jwt.ParseECPublicKeyFromPEM([]byte(pemStr))
+	if err != nil {
+		return nil, fmt.Errorf("invalid PRIVY_VERIFICATION_KEY: %w", err)
+	}
 	claims := &privyClaims{}
-	parsed, err := jwt.ParseWithClaims(privyToken, claims, func(token *jwt.Token) (any, error) {
+	_, err = jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+		if t.Method.Alg() != jwt.SigningMethodES256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
+		}
+		return key, nil
+	})
+	if err != nil {
+		return nil, errors.New("invalid privy token")
+	}
+	return claims, nil
+}
+
+func (s *Service) verifyPrivyRS256Claims(tokenString string) (*privyClaims, error) {
+	claims := &privyClaims{}
+	_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
 		kid, _ := token.Header["kid"].(string)
 		if strings.TrimSpace(kid) == "" {
 			return nil, errors.New("missing kid")
 		}
 		return s.fetchJWKPublicKey(kid)
 	})
-	if err != nil || !parsed.Valid {
-		return nil, "", errors.New("invalid privy token")
+	if err != nil {
+		return nil, errors.New("invalid privy token")
 	}
+	return claims, nil
+}
 
-	if claims.Issuer != s.cfg.PrivyIssuer {
-		return nil, "", errors.New("invalid privy issuer")
+func validatePrivyClaims(claims *privyClaims, appID, configuredIssuer string) error {
+	if !privyIssuerOK(claims.Issuer, configuredIssuer) {
+		return errors.New("invalid privy issuer")
 	}
-	if !containsAudience(claims.Audience, s.cfg.PrivyAppID) {
-		return nil, "", errors.New("privy token audience mismatch")
+	if !containsAudience(claims.Audience, appID) {
+		return errors.New("privy token audience mismatch")
 	}
 	if strings.TrimSpace(claims.Sub) == "" {
-		return nil, "", errors.New("missing subject in privy token")
+		return errors.New("missing subject in privy token")
 	}
+	return nil
+}
 
-	return s.issueSession(context.Background(), claims.Sub, claims.WalletAddress, "privy")
+func privyIssuerOK(iss, configured string) bool {
+	if iss == "" {
+		return false
+	}
+	if iss == configured {
+		return true
+	}
+	// Current Privy access / identity JWTs commonly use issuer "privy.io".
+	switch iss {
+	case "privy.io", "https://privy.io":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) ParseSessionToken(tokenString string) (*Principal, error) {

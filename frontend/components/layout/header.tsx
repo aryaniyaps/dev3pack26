@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { useRubyLogout } from "@/hooks/use-ruby-logout";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatWalletAddress } from "@/lib/utils";
 import { LogOut, User } from "lucide-react";
@@ -10,7 +11,8 @@ interface HeaderProps {
 }
 
 export function Header({ onLoginClick }: HeaderProps) {
-  const { token, walletAddress, email, logout } = useAuthStore();
+  const { token, walletAddress, email } = useAuthStore();
+  const logout = useRubyLogout();
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">

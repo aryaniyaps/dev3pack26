@@ -5,6 +5,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { GroupInsightsPanel } from "@/components/dashboard/group-insights-panel";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { useRubyLogout } from "@/hooks/use-ruby-logout";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRubyEventsWs } from "@/hooks/use-ruby-events-ws";
 import {
@@ -32,7 +33,8 @@ const RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana
 
 function DashboardInner() {
   const router = useRouter();
-  const { walletAddress, email, principal, logout } = useAuthStore();
+  const { walletAddress, email, principal } = useAuthStore();
+  const logout = useRubyLogout();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -227,7 +229,7 @@ function DashboardInner() {
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-strong)] pb-6">
-          <div>
+              <div>
             <h1 className="text-2xl font-semibold tracking-tight">Ruby · Circles</h1>
             <p className="text-sm text-[var(--muted)]">
               Live data from the API · WebSocket {connected ? "connected" : "reconnecting…"}
@@ -238,7 +240,7 @@ function DashboardInner() {
               href="/create"
               className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
             >
-              New circle
+                  New circle
             </Link>
             <Link
               href="/activity"
@@ -253,8 +255,8 @@ function DashboardInner() {
               className="rounded-lg border border-[var(--border-strong)] px-3 py-2 text-sm hover:bg-slate-50"
             >
               Log out
-            </button>
-          </div>
+                </button>
+              </div>
         </header>
 
         {err && (
@@ -265,7 +267,7 @@ function DashboardInner() {
           <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--card)] p-4 shadow-sm">
             <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Circles</div>
             <div className="mt-1 text-2xl font-semibold">{groups.length}</div>
-          </div>
+                </div>
           <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--card)] p-4 shadow-sm">
             <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Stream events</div>
             <div className="mt-1 text-2xl font-semibold">{events.length}</div>
@@ -276,10 +278,10 @@ function DashboardInner() {
                   {typeof e.payload?.group_id === "string" ? `· ${e.payload.group_id}` : ""}
                 </div>
               ))}
-            </div>
-          </div>
+                </div>
+              </div>
           <div className="flex flex-col justify-between rounded-xl border border-[var(--border-strong)] bg-[var(--card)] p-4 shadow-sm">
-            <div>
+                <div>
               <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Treasury agent</div>
               <p className="mt-1 text-sm text-[var(--muted)]">Runs the Go scheduler against all circles (demo).</p>
             </div>
@@ -318,7 +320,7 @@ function DashboardInner() {
             >
               {joinBusy ? "Joining…" : "Join"}
             </button>
-          </div>
+                </div>
         </section>
 
         <section className="overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--card)] shadow-sm">
@@ -331,7 +333,7 @@ function DashboardInner() {
             >
               Refresh
             </button>
-          </div>
+              </div>
           {loading ? (
             <div className="p-8 text-center text-sm text-[var(--muted)]">Loading…</div>
           ) : groups.length === 0 ? (
@@ -353,9 +355,9 @@ function DashboardInner() {
                     <th className="px-4 py-2">Vault (SOL)</th>
                     <th className="px-4 py-2">Cycle</th>
                     <th className="px-4 py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+                        </tr>
+                      </thead>
+                      <tbody>
                   {groups.map((g) => {
                     const myMember = g.members?.find(
                       (m) => displayWallet && m.wallet_address.toLowerCase() === displayWallet.toLowerCase(),
@@ -372,7 +374,7 @@ function DashboardInner() {
                             {g.cycle_deadline
                               ? ` · due ${new Date(g.cycle_deadline).toLocaleDateString()}`
                               : ""}
-                          </td>
+                            </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-2">
                               <button
@@ -405,8 +407,8 @@ function DashboardInner() {
                               >
                                 Anchor contribute
                               </button>
-                            </div>
-                          </td>
+                              </div>
+                            </td>
                         </tr>
                         {expandedGroupId === g.id && (
                           <tr className="border-t border-[var(--border-strong)]">
@@ -423,9 +425,9 @@ function DashboardInner() {
                       </Fragment>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                      </tbody>
+                    </table>
+                  </div>
           )}
         </section>
 

@@ -75,7 +75,8 @@ make services-down
 | `BLINK_BASE_URL` | Base URL for generated blink links |
 | `PRIVY_APP_ID` | Privy app ID (JWT audience) |
 | `PRIVY_ISSUER` | Privy JWT issuer |
-| `PRIVY_JWKS_URL` | Privy JWKS endpoint |
+| `PRIVY_JWKS_URL` | Privy JWKS endpoint (RS256 tokens) |
+| `PRIVY_VERIFICATION_KEY` | PEM EC public key from Privy Dashboard (ES256 access / identity tokens) |
 | `AGENT_AUTO_RUN` | Enables periodic treasury agent runs |
 | `AGENT_INTERVAL_SECONDS` | Scheduler interval for auto agent runs |
 | `RUBY_PROGRAM_ID` | Anchor `ruby_protocol` program ID |

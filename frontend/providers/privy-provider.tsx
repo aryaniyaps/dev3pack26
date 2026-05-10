@@ -18,7 +18,7 @@ export function PrivyProvider({ appId, children }: PrivyProviderProps) {
   return (
     <PrivyAuthProvider
       appId={configuredAppId}
-      clientId={clientId}
+      {...(clientId ? { clientId } : {})}
       config={{
         loginMethods: ['email'],
         appearance: {

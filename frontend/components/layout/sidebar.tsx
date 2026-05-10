@@ -1,5 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/stores/auth-store";
+import { useRubyLogout } from "@/hooks/use-ruby-logout";
 import { Home, Users, TrendingUp, Bell, FileText, Link as LinkIcon, Wallet, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,7 +11,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className }: SidebarProps) {
-  const { logout } = useAuthStore();
+  const logout = useRubyLogout();
   const pathname = usePathname();
 
   const menuItems = [

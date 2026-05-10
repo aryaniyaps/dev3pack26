@@ -17,9 +17,10 @@ type Config struct {
 	SendAIAPIKey       string
 	AuthJWTSecret      string
 	AuthSessionTTLMin  int64
-	PrivyAppID         string
-	PrivyIssuer        string
-	PrivyJWKSURL       string
+	PrivyAppID             string
+	PrivyIssuer            string
+	PrivyJWKSURL           string
+	PrivyVerificationKey   string // PEM EC public key for ES256 access / identity tokens (Privy Dashboard → App settings)
 	AuthDomain         string
 	BlinkBaseURL       string
 	AgentAutoRun       bool
@@ -51,9 +52,10 @@ func Load() *Config {
 		SendAIAPIKey:       os.Getenv("SENDAI_API_KEY"),
 		AuthJWTSecret:      envOrDefault("AUTH_JWT_SECRET", "dev-change-me"),
 		AuthSessionTTLMin:  envInt64("AUTH_SESSION_TTL_MINUTES", 60*24*7),
-		PrivyAppID:         os.Getenv("PRIVY_APP_ID"),
-		PrivyIssuer:        envOrDefault("PRIVY_ISSUER", "https://auth.privy.io"),
-		PrivyJWKSURL:       os.Getenv("PRIVY_JWKS_URL"),
+		PrivyAppID:           os.Getenv("PRIVY_APP_ID"),
+		PrivyIssuer:          envOrDefault("PRIVY_ISSUER", "https://auth.privy.io"),
+		PrivyJWKSURL:         os.Getenv("PRIVY_JWKS_URL"),
+		PrivyVerificationKey: os.Getenv("PRIVY_VERIFICATION_KEY"),
 		AuthDomain:         envOrDefault("AUTH_DOMAIN", "localhost:3000"),
 		BlinkBaseURL:       envOrDefault("BLINK_BASE_URL", "http://localhost:3000/blinks"),
 		AgentAutoRun:       envBool("AGENT_AUTO_RUN", false),
