@@ -190,8 +190,8 @@ func (h *Handler) VerifyPhantomAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
+	auth.SetSessionCookie(w, h.Config, token)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token":     token,
 		"principal": principal,
 	})
 }
@@ -211,8 +211,8 @@ func (h *Handler) VerifyPrivyAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
+	auth.SetSessionCookie(w, h.Config, token)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token":     token,
 		"principal": principal,
 	})
 }
@@ -236,6 +236,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to revoke session")
 		return
 	}
+	auth.ClearSessionCookie(w, h.Config)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 }
 

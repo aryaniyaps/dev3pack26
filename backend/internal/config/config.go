@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +22,14 @@ type Config struct {
 	PrivyIssuer            string
 	PrivyJWKSURL           string
 	PrivyVerificationKey   string // PEM EC public key for ES256 access / identity tokens (Privy Dashboard → App settings)
+	// CORSAllowedOrigins lists exact browser origins allowed to call this API with credentials (comma-separated in env).
+	CORSAllowedOrigins []string
+	// SessionCookieName is the HttpOnly cookie storing the Ruby session JWT (default ruby_session).
+	SessionCookieName string
+	// SessionCookieSecure sets the Secure flag (required for SameSite=None; use true in production HTTPS).
+	SessionCookieSecure bool
+	// SessionCookieSameSite is Lax (default local), None (cross-site SPA + API), or Strict.
+	SessionCookieSameSite http.SameSite
 	AuthDomain         string
 	BlinkBaseURL       string
 	AgentAutoRun       bool
@@ -43,10 +52,22 @@ func Load() *Config {
 		port = "8080"
 	}
 
+	appEnv := envOrDefault("APP_ENV", "development")
+	corsOrigins := parseCSVTrim(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if len(corsOrigins) == 0 {
+		corsOrigins = []string{"http://localhost:3000", "http://127.0.0.1:3000"}
+	}
+
+	sessionSame := parseSameSite(envOrDefault("SESSION_COOKIE_SAMESITE", defaultSameSiteMode(appEnv)))
+	sessionSecure := envBool("SESSION_COOKIE_SECURE", appEnv == "production")
+	if sessionSame == http.SameSiteNoneMode {
+		sessionSecure = true
+	}
+
 	return &Config{
 		Port:               port,
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
-		AppEnv:             envOrDefault("APP_ENV", "development"),
+		AppEnv:             appEnv,
 		SolanaRPCURL:       envOrDefault("SOLANA_RPC_URL", "https://api.devnet.solana.com"),
 		HeliusAPIKey:       os.Getenv("HELIUS_API_KEY"),
 		SendAIAPIKey:       os.Getenv("SENDAI_API_KEY"),
@@ -57,6 +78,10 @@ func Load() *Config {
 		PrivyJWKSURL:         os.Getenv("PRIVY_JWKS_URL"),
 		// Privy dashboard / one-line env pastes often use literal \n; PEM must contain real newlines.
 		PrivyVerificationKey: normalizePEMEnv(os.Getenv("PRIVY_VERIFICATION_KEY")),
+		CORSAllowedOrigins:   corsOrigins,
+		SessionCookieName:    os.Getenv("SESSION_COOKIE_NAME"),
+		SessionCookieSecure:  sessionSecure,
+		SessionCookieSameSite: sessionSame,
 		AuthDomain:         envOrDefault("AUTH_DOMAIN", "localhost:3000"),
 		BlinkBaseURL:       envOrDefault("BLINK_BASE_URL", "http://localhost:3000/blinks"),
 		AgentAutoRun:       envBool("AGENT_AUTO_RUN", false),
@@ -77,6 +102,38 @@ func normalizePEMEnv(s string) string {
 		return ""
 	}
 	return strings.ReplaceAll(s, "\\n", "\n")
+}
+
+func defaultSameSiteMode(appEnv string) string {
+	if appEnv == "production" {
+		return "none"
+	}
+	return "lax"
+}
+
+func parseSameSite(s string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
+}
+
+func parseCSVTrim(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func envOrDefault(key, fallback string) string {

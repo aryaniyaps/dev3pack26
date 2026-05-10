@@ -11,7 +11,7 @@ interface HeaderProps {
 }
 
 export function Header({ onLoginClick }: HeaderProps) {
-  const { token, walletAddress, email } = useAuthStore();
+  const { isAuthenticated, walletAddress, email } = useAuthStore();
   const logout = useRubyLogout();
 
   return (
@@ -30,7 +30,7 @@ export function Header({ onLoginClick }: HeaderProps) {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
               Devnet
             </span>
-            {token ? (
+            {isAuthenticated ? (
               <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-2">
                 <div className="flex items-center gap-2 text-sm text-slate-700">
                   <User className="h-4 w-4" />

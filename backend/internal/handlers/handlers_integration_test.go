@@ -136,12 +136,12 @@ func TestAuthMeAndLogoutProtectedEndpoints(t *testing.T) {
 			ExpiresAt:     time.Now().UTC().Add(30 * time.Minute),
 		},
 	}
-	h := &Handler{Auth: fake}
+	h := &Handler{Auth: fake, Config: testCookieConfig()}
 
 	router := chi.NewRouter()
 	router.Route("/api/v1/auth", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
-			r.Use(auth.Middleware(fake))
+			r.Use(auth.Middleware(fake, testCookieConfig()))
 			r.Get("/me", h.AuthMe)
 			r.Post("/logout", h.Logout)
 		})
@@ -149,7 +149,7 @@ func TestAuthMeAndLogoutProtectedEndpoints(t *testing.T) {
 
 	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	meReq = meReq.WithContext(context.Background())
-	meReq.Header.Set("Authorization", "Bearer valid-token")
+	meReq.AddCookie(&http.Cookie{Name: "ruby_session", Value: "valid-token", Path: "/"})
 	meRR := httptest.NewRecorder()
 	router.ServeHTTP(meRR, meReq)
 	if meRR.Code != http.StatusOK {
@@ -166,7 +166,7 @@ func TestAuthMeAndLogoutProtectedEndpoints(t *testing.T) {
 
 	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutReq = logoutReq.WithContext(context.Background())
-	logoutReq.Header.Set("Authorization", "Bearer valid-token")
+	logoutReq.AddCookie(&http.Cookie{Name: "ruby_session", Value: "valid-token", Path: "/"})
 	logoutRR := httptest.NewRecorder()
 	router.ServeHTTP(logoutRR, logoutReq)
 	if logoutRR.Code != http.StatusOK {
@@ -200,11 +200,11 @@ func TestProtectedRouteRejectsMissingBearer(t *testing.T) {
 			ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
 		},
 	}
-	h := &Handler{Auth: fake}
+	h := &Handler{Auth: fake, Config: testCookieConfig()}
 
 	router := chi.NewRouter()
 	router.Group(func(r chi.Router) {
-		r.Use(auth.Middleware(fake))
+		r.Use(auth.Middleware(fake, testCookieConfig()))
 		r.Post("/api/v1/groups", h.CreateGroup)
 	})
 

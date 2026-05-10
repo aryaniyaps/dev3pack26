@@ -9,9 +9,9 @@ const API_BASE_URL =
   `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080'}/api/v1`;
 
 /**
- * Ruby sessions are Bearer JWTs kept in localStorage via zustand persist (`auth-storage`),
- * not browser cookies. If `/auth/me` fails for network/CORS reasons, keep the token so
- * the session still “sticks” until the server explicitly returns 401/403.
+ * Ruby sessions use an HttpOnly `ruby_session` cookie set by the API on verify.
+ * Zustand persists principal + UI hints (`auth-storage`); API calls use `credentials: "include"`.
+ * If `/auth/me` fails for network/CORS reasons, keep local principal until the server returns 401/403.
  */
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -34,7 +34,6 @@ interface AuthPrincipal {
 interface AuthState {
   walletAddress: string | null;
   email: string | null;
-  token: string | null;
   principal: AuthPrincipal | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -55,7 +54,6 @@ interface AuthActions {
 type AuthStore = AuthState & AuthActions;
 
 type AuthSessionResponse = {
-  token: string;
   principal: AuthPrincipal;
 };
 
@@ -120,17 +118,17 @@ function toSignatureBytes(sig: unknown): Uint8Array {
   throw new Error('Wallet returned an unexpected signature format');
 }
 
-async function apiFetch<T>(
-  path: string,
-  init: RequestInit = {},
-  token?: string | null
-): Promise<T> {
+async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const extraHeaders =
+    init.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+      ? (init.headers as Record<string, string>)
+      : {};
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
+      ...extraHeaders,
     },
   });
 
@@ -171,7 +169,6 @@ async function verifyPhantomAuth(payload: {
 
 function sessionState(session: AuthSessionResponse, email?: string | null) {
   return {
-    token: session.token,
     principal: session.principal,
     walletAddress: session.principal.wallet_address || null,
     email: email ?? null,
@@ -235,10 +232,9 @@ async function signWithLocalDevWallet() {
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       walletAddress: null,
       email: null,
-      token: null,
       principal: null,
       isAuthenticated: false,
       isLoading: false,
@@ -293,10 +289,6 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       refreshSession: async (options?: { silent?: boolean }) => {
-        const token = get().token;
-        if (!token) {
-          return;
-        }
         const silent = options?.silent ?? false;
         if (silent) {
           set({ error: null });
@@ -304,7 +296,7 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: true, error: null });
         }
         try {
-          const principal = await apiFetch<AuthPrincipal>('/auth/me', { method: 'GET' }, token);
+          const principal = await apiFetch<AuthPrincipal>('/auth/me', { method: 'GET' });
           set({
             principal,
             walletAddress: principal.wallet_address || null,
@@ -317,7 +309,6 @@ export const useAuthStore = create<AuthStore>()(
           const sessionRejected = status === 401 || status === 403;
           if (sessionRejected) {
             set({
-              token: null,
               principal: null,
               walletAddress: null,
               email: null,
@@ -340,18 +331,14 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: async () => {
-        const token = get().token;
-        if (token) {
-          try {
-            await apiFetch('/auth/logout', { method: 'POST' }, token);
-          } catch {
-            // Local logout should still clear stale or already-revoked sessions.
-          }
+        try {
+          await apiFetch('/auth/logout', { method: 'POST' });
+        } catch {
+          // Local logout should still clear stale or already-revoked sessions.
         }
         set({
           walletAddress: null,
           email: null,
-          token: null,
           principal: null,
           isAuthenticated: false,
           isLoading: false,
@@ -365,25 +352,24 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'auth-storage',
       merge: (persistedState, currentState) => {
-        const p = (persistedState ?? {}) as Partial<
-          Pick<AuthState, 'walletAddress' | 'email' | 'token' | 'principal' | 'isAuthenticated'>
-        >;
+        const p = (persistedState ?? {}) as Partial<AuthState & { token?: string | null }>;
+        const { token: _legacyToken, ...rest } = p;
         const merged = {
           ...currentState,
-          ...p,
+          ...rest,
         };
-        if (merged.token) {
+        if (merged.principal) {
           merged.isAuthenticated = true;
         }
         return merged;
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
+        void state?.refreshSession({ silent: true });
       },
       partialize: (state) => ({
         walletAddress: state.walletAddress,
         email: state.email,
-        token: state.token,
         principal: state.principal,
         isAuthenticated: state.isAuthenticated,
       }),

@@ -9,19 +9,19 @@ import { clearRubySessionCookie, setRubySessionCookie } from "@/lib/session-cook
  * can align with Privy's cookie-based SSR guidance.
  */
 export function SessionCookieSync() {
-  const token = useAuthStore((s) => s.token);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
 
   useEffect(() => {
     if (!hasHydrated) {
       return;
     }
-    if (token) {
+    if (isAuthenticated) {
       setRubySessionCookie();
     } else {
       clearRubySessionCookie();
     }
-  }, [hasHydrated, token]);
+  }, [hasHydrated, isAuthenticated]);
 
   return null;
 }

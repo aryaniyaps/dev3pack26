@@ -1,7 +1,6 @@
 /**
- * Lightweight cookie so Next.js middleware can gate routes while the Ruby JWT
- * lives in localStorage (zustand persist). API calls still require the Bearer token.
- * Must stay in sync with {@link SessionCookieSync}.
+ * Lightweight cookie so Next.js middleware can gate routes alongside the HttpOnly
+ * Ruby session cookie from the API. Must stay in sync with {@link SessionCookieSync}.
  */
 export const RUBY_SESSION_COOKIE = "ruby_authed";
 

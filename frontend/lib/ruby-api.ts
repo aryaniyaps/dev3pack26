@@ -1,8 +1,21 @@
-import { useAuthStore } from "@/stores/auth-store";
-
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   `${process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080"}/api/v1`;
+
+function apiInit(extra: RequestInit = {}): RequestInit {
+  const extraHeaders =
+    extra.headers && typeof extra.headers === "object" && !Array.isArray(extra.headers)
+      ? (extra.headers as Record<string, string>)
+      : {};
+  return {
+    credentials: "include",
+    ...extra,
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+  };
+}
 
 export type Group = {
   id: string;
@@ -54,14 +67,6 @@ export type WsEvent = {
   payload: Record<string, unknown>;
 };
 
-function headers(): HeadersInit {
-  const token = useAuthStore.getState().token;
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 async function parseError(res: Response): Promise<string> {
   let message = `Request failed (${res.status})`;
   try {
@@ -74,20 +79,20 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function fetchGroups(): Promise<Group[]> {
-  const res = await fetch(`${API_BASE}/groups`, { headers: headers() });
+  const res = await fetch(`${API_BASE}/groups`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   const data: unknown = await res.json();
   return Array.isArray(data) ? (data as Group[]) : [];
 }
 
 export async function fetchChainEvents(limit = 50): Promise<ChainEvent[]> {
-  const res = await fetch(`${API_BASE}/chain-events?limit=${limit}`);
+  const res = await fetch(`${API_BASE}/chain-events?limit=${limit}`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<ChainEvent[]>;
 }
 
 export async function fetchOnchainConfig(): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/onchain/config`);
+  const res = await fetch(`${API_BASE}/onchain/config`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<Record<string, unknown>>;
 }
@@ -101,11 +106,10 @@ export async function createGroup(body: {
   swig_vault_addr?: string;
   on_chain_pda?: string;
 }): Promise<Group> {
-  const res = await fetch(`${API_BASE}/groups`, {
+  const res = await fetch(`${API_BASE}/groups`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<Group>;
 }
@@ -114,11 +118,10 @@ export async function joinGroup(
   groupId: string,
   body: { member_id: string; wallet_address: string; invite_code?: string; referrer_member_id?: string },
 ): Promise<{ member: Member; referral_applied: boolean }> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/join`, {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/join`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ member: Member; referral_applied: boolean }>;
 }
@@ -133,11 +136,10 @@ export async function contribute(
     tx_signature: string;
   },
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/contribute`, {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/contribute`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<Record<string, unknown>>;
 }
@@ -153,11 +155,10 @@ export async function buildTx(
     | "create-blink",
   body: Record<string, unknown>,
 ): Promise<TxPlan> {
-  const res = await fetch(`${API_BASE}/tx/build/${encodeURIComponent(action)}`, {
+  const res = await fetch(`${API_BASE}/tx/build/${encodeURIComponent(action)}`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<TxPlan>;
 }
@@ -167,17 +168,16 @@ export async function runTreasuryAgent(body: { group_id?: string; dry_run?: bool
   dry_run: boolean;
   results: unknown[];
 }> {
-  const res = await fetch(`${API_BASE}/agent/run`, {
+  const res = await fetch(`${API_BASE}/agent/run`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ run_at: string; dry_run: boolean; results: unknown[] }>;
 }
 
 export async function fetchGroupExplorer(groupId: string): Promise<Record<string, string>> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/explorer`);
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/explorer`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<Record<string, string>>;
 }
@@ -236,13 +236,13 @@ export type BlinkActionRow = {
 };
 
 export async function fetchGroupCycle(groupId: string): Promise<GroupCycleResponse> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle`);
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<GroupCycleResponse>;
 }
 
 export async function fetchGroupYield(groupId: string): Promise<GroupYieldResponse> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/yield`);
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/yield`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<GroupYieldResponse>;
 }
@@ -250,19 +250,20 @@ export async function fetchGroupYield(groupId: string): Promise<GroupYieldRespon
 export async function fetchMemberCreditScore(groupId: string, memberId: string): Promise<{ credit_score: number }> {
   const res = await fetch(
     `${API_BASE}/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberId)}/credit-score`,
+    apiInit(),
   );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ credit_score: number }>;
 }
 
 export async function fetchWeb3Balance(address: string): Promise<Web3BalanceResponse> {
-  const res = await fetch(`${API_BASE}/web3/balance?address=${encodeURIComponent(address)}`);
+  const res = await fetch(`${API_BASE}/web3/balance?address=${encodeURIComponent(address)}`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<Web3BalanceResponse>;
 }
 
 export async function fetchBlinkActions(): Promise<BlinkActionRow[]> {
-  const res = await fetch(`${API_BASE}/blinks/actions`);
+  const res = await fetch(`${API_BASE}/blinks/actions`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<BlinkActionRow[]>;
 }
@@ -271,11 +272,10 @@ export async function createBlink(
   blinkType: "contribute" | "vote" | "withdraw",
   body: { group_id: string; member_id?: string; payload?: Record<string, unknown> },
 ): Promise<{ action_id: string; blink_type: string; url: string; status: string }> {
-  const res = await fetch(`${API_BASE}/blinks/${encodeURIComponent(blinkType)}/create`, {
+  const res = await fetch(`${API_BASE}/blinks/${encodeURIComponent(blinkType)}/create`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ action_id: string; blink_type: string; url: string; status: string }>;
 }
@@ -305,7 +305,7 @@ export type SwigProposalRow = {
 };
 
 export async function fetchLoanRequests(groupId: string): Promise<LoanRequestRow[]> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`);
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<LoanRequestRow[]>;
 }
@@ -314,11 +314,10 @@ export async function createLoanRequest(
   groupId: string,
   body: { borrower_member_id: string; amount_lamports: number; reason?: string; id?: string },
 ): Promise<LoanRequestRow> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`, {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<LoanRequestRow>;
 }
@@ -330,18 +329,17 @@ export async function voteLoanRequest(
 ): Promise<{ loan_id: string; status: string; approvals: number; rejects: number }> {
   const res = await fetch(
     `${API_BASE}/groups/${encodeURIComponent(groupId)}/loans/${encodeURIComponent(loanId)}/vote`,
-    {
+    apiInit({
       method: "POST",
-      headers: headers(),
       body: JSON.stringify(body),
-    },
+    }),
   );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ loan_id: string; status: string; approvals: number; rejects: number }>;
 }
 
 export async function fetchSwigProposals(groupId: string): Promise<SwigProposalRow[]> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`);
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`, apiInit());
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<SwigProposalRow[]>;
 }
@@ -356,11 +354,10 @@ export async function createSwigProposal(
     created_by_member_id: string;
   },
 ): Promise<SwigProposalRow> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`, {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`, apiInit({
     method: "POST",
-    headers: headers(),
     body: JSON.stringify(body),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<SwigProposalRow>;
 }
@@ -372,11 +369,10 @@ export async function approveSwigProposal(
 ): Promise<SwigProposalRow> {
   const res = await fetch(
     `${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals/${encodeURIComponent(proposalId)}/approve`,
-    {
+    apiInit({
       method: "POST",
-      headers: headers(),
       body: JSON.stringify(body),
-    },
+    }),
   );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<SwigProposalRow>;
@@ -391,10 +387,9 @@ export async function endGroupCycle(groupId: string): Promise<{
   total_cycle_pool: number;
   member_allocations: { member_id: string; wallet_address: string; share_lamports: number; contributed_in_cycle: number }[];
 }> {
-  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle/end`, {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle/end`, apiInit({
     method: "POST",
-    headers: headers(),
-  });
+  }));
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{
     group_id: string;

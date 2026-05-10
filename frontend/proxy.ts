@@ -9,7 +9,7 @@ import { RUBY_SESSION_COOKIE } from "@/lib/session-cookie";
  *
  * - `privy-token`: valid Privy access JWT for this request
  * - `privy-session`: client may refresh → `/refresh`
- * - `ruby_authed`: Ruby session hint (see SessionCookieSync); API still validates Bearer JWT
+ * - `ruby_authed`: first-party hint that the client believes Ruby is authenticated; the API still validates the HttpOnly session cookie.
  */
 export function proxy(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;

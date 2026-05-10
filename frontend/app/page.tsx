@@ -9,10 +9,10 @@ import { AUTH_REDIRECT_PATH } from "@/lib/auth-paths";
 
 export default function HomePage() {
   const router = useRouter();
-  const { hasHydrated, token } = useAuthStore();
+  const { hasHydrated, isAuthenticated } = useAuthStore();
 
   useLayoutEffect(() => {
-    if (!hasHydrated || !token) {
+    if (!hasHydrated || !isAuthenticated) {
       return;
     }
     let next = AUTH_REDIRECT_PATH;
@@ -23,13 +23,13 @@ export default function HomePage() {
       }
     }
     router.replace(next);
-  }, [hasHydrated, token, router]);
+  }, [hasHydrated, isAuthenticated, router]);
 
   if (!hasHydrated) {
     return <AuthLoading />;
   }
 
-  if (token) {
+  if (isAuthenticated) {
     return <AuthLoading label="Opening dashboard…" />;
   }
 

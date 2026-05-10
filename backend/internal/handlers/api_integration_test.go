@@ -66,13 +66,13 @@ func TestIntegration_ContributeCreditBeforeDeadline(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(auth.Middleware(fake))
+		r.Use(auth.Middleware(fake, testCookieConfig()))
 		r.Post("/api/v1/groups/{groupID}/contribute", h.Contribute)
 	})
 
 	body := `{"member_id":"` + mid + `","wallet_address":"` + m.WalletAddress + `","amount":5000000,"cycle_number":1,"tx_signature":"tx_it_1"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/groups/"+gid+"/contribute", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.AddCookie(&http.Cookie{Name: "ruby_session", Value: "valid-token", Path: "/"})
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -250,12 +250,12 @@ func TestIntegration_EndCycleSettlement(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(auth.Middleware(fake))
+		r.Use(auth.Middleware(fake, testCookieConfig()))
 		r.Post("/api/v1/groups/{groupID}/cycle/end", h.EndGroupCycle)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/groups/"+gid+"/cycle/end", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.AddCookie(&http.Cookie{Name: "ruby_session", Value: "valid-token", Path: "/"})
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

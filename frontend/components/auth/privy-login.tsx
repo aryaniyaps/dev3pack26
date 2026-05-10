@@ -14,8 +14,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Keeps Privy (browser session) and Ruby (JWT in zustand) in sync.
- * If Privy already has `authenticated: true` but Ruby has no token, calling `login()`
+ * Keeps Privy (browser session) and Ruby (HttpOnly session cookie + persisted principal) in sync.
+ * If Privy already has `authenticated: true` but Ruby has no session, calling `login()`
  * throws ("already logged in… use link"). We must exchange a Privy JWT
  * (`usePrivy().getAccessToken()` or identity token) for a Ruby session.
  *
@@ -26,7 +26,7 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
   const { authenticated, login, ready, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
   const identityTokenRef = useRef<string | null>(null);
-  const rubyToken = useAuthStore((s) => s.token);
+  const rubyAuthed = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { verifyPrivyToken, isLoading } = useAuthStore();
   const lastOkIdentityRef = useRef<string | null>(null);
@@ -55,7 +55,7 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
     if (!ready || !authenticated) {
       return;
     }
-    if (useAuthStore.getState().token) {
+    if (useAuthStore.getState().isAuthenticated) {
       return;
     }
     if (inFlightRef.current) {
@@ -111,24 +111,24 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
   }, [authenticated, emailAddr, getAccessToken, hasHydrated, ready, verifyPrivyToken]);
 
   useEffect(() => {
-    if (!rubyToken) {
+    if (!rubyAuthed) {
       lastOkIdentityRef.current = null;
     }
-  }, [rubyToken]);
+  }, [rubyAuthed]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
       void syncRubyFromPrivy();
     }, 350);
     return () => window.clearTimeout(t);
-  }, [syncRubyFromPrivy, rubyToken]);
+  }, [syncRubyFromPrivy, rubyAuthed]);
 
   const handleClick = () => {
     if (!ready || isLoading) {
       return;
     }
     if (authenticated) {
-      if (!useAuthStore.getState().token) {
+      if (!useAuthStore.getState().isAuthenticated) {
         void syncRubyFromPrivy();
       }
       return;
@@ -136,7 +136,7 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
     login({ loginMethods: ["email"] });
   };
 
-  const needsRubySync = authenticated && !rubyToken;
+  const needsRubySync = authenticated && !rubyAuthed;
   const label = !authenticated
     ? "Continue with email"
     : needsRubySync

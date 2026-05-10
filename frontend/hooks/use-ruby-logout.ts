@@ -11,7 +11,7 @@ function privyEnabled(): boolean {
 /**
  * Clears the Ruby session (API + persisted store) then signs out of Privy when the app
  * is configured for Privy. Keeps browser state consistent so the login page does not
- * show “Privy authenticated” with no Ruby token after logout.
+ * show “Privy authenticated” with no Ruby session after logout.
  */
 export function useRubyLogout() {
   const storeLogout = useAuthStore((s) => s.logout);

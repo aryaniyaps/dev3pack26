@@ -59,7 +59,7 @@ func runServer() {
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.Logger)
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg))
 
 	// Health check (no version prefix — used by Render health probe)
 	r.Get("/health", h.Health)
@@ -74,7 +74,7 @@ func runServer() {
 			r.Post("/privy/verify", h.VerifyPrivyAuth)
 
 			r.Group(func(r chi.Router) {
-				r.Use(auth.Middleware(h.Auth))
+				r.Use(auth.Middleware(h.Auth, cfg))
 				r.Get("/me", h.AuthMe)
 				r.Post("/logout", h.Logout)
 			})
@@ -96,7 +96,7 @@ func runServer() {
 		r.Get("/chain-events", h.ListChainEvents)
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.Middleware(h.Auth))
+			r.Use(auth.Middleware(h.Auth, cfg))
 			r.Post("/groups", h.CreateGroup)
 			r.Post("/groups/{groupID}/invite-links", h.CreateGroupInviteLink)
 			r.Post("/groups/{groupID}/join", h.JoinGroup)

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/dev3pack/ruby/backend/internal/config"
 )
 
 type contextKey string
@@ -15,15 +17,14 @@ type TokenParser interface {
 	ParseSessionToken(tokenString string) (*Principal, error)
 }
 
-func Middleware(svc TokenParser) func(http.Handler) http.Handler {
+func Middleware(svc TokenParser, cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authz := r.Header.Get("Authorization")
-			if !strings.HasPrefix(authz, "Bearer ") {
-				writeAuthError(w, http.StatusUnauthorized, "missing bearer token")
+			token := ReadSessionToken(r, cfg)
+			if strings.TrimSpace(token) == "" {
+				writeAuthError(w, http.StatusUnauthorized, "missing session")
 				return
 			}
-			token := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
 			principal, err := svc.ParseSessionToken(token)
 			if err != nil {
 				writeAuthError(w, http.StatusUnauthorized, "invalid session token")

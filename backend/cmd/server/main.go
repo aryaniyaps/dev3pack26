@@ -55,7 +55,7 @@ func runServer() {
 	r := chi.NewRouter()
 
 	r.Use(chiMiddleware.Recoverer)
-	r.Use(appMiddleware.CORS())
+	r.Use(appMiddleware.CORS(cfg))
 	r.Use(appMiddleware.Logger)
 
 	r.Get("/health", h.Health)
@@ -68,7 +68,7 @@ func runServer() {
 			r.Post("/privy/verify", h.VerifyPrivyAuth)
 
 			r.Group(func(r chi.Router) {
-				r.Use(auth.Middleware(h.Auth))
+				r.Use(auth.Middleware(h.Auth, cfg))
 				r.Get("/me", h.AuthMe)
 				r.Post("/logout", h.Logout)
 			})
@@ -89,7 +89,7 @@ func runServer() {
 		r.Get("/chain-events", h.ListChainEvents)
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.Middleware(h.Auth))
+			r.Use(auth.Middleware(h.Auth, cfg))
 			r.Post("/groups", h.CreateGroup)
 			r.Post("/groups/{groupID}/invite-links", h.CreateGroupInviteLink)
 			r.Post("/groups/{groupID}/join", h.JoinGroup)
