@@ -206,15 +206,33 @@ func (h *Handler) VerifyPrivyAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	if strings.TrimSpace(req.PrivyToken) == "" {
+		writeError(w, http.StatusBadRequest, "privy_token is required")
+		return
+	}
 	principal, token, err := h.Auth.VerifyPrivyToken(req.PrivyToken)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		status := http.StatusUnauthorized
+		if privyVerifyIsServerMisconfig(err) {
+			status = http.StatusServiceUnavailable
+		}
+		writeError(w, status, err.Error())
 		return
 	}
 	auth.SetSessionCookie(w, h.Config, token)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"principal": principal,
 	})
+}
+
+// privyVerifyIsServerMisconfig returns true when the failure is missing/wrong Privy
+// verification setup on the server (not a bad end-user token).
+func privyVerifyIsServerMisconfig(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "PRIVY_APP_ID is required on backend") ||
+		strings.Contains(msg, "set PRIVY_JWKS_URL") ||
+		strings.Contains(msg, "PRIVY_JWKS_URL is required for RS256") ||
+		strings.Contains(msg, "invalid PRIVY_VERIFICATION_KEY")
 }
 
 func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
