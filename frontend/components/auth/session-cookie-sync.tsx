@@ -1,0 +1,27 @@
+"use client";
+
+import { useEffect } from "react";
+import { useAuthStore } from "@/stores/auth-store";
+import { clearRubySessionCookie, setRubySessionCookie } from "@/lib/session-cookie";
+
+/**
+ * Mirrors persisted Ruby session into a first-party cookie so Edge middleware
+ * can align with Privy's cookie-based SSR guidance.
+ */
+export function SessionCookieSync() {
+  const token = useAuthStore((s) => s.token);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+    if (token) {
+      setRubySessionCookie();
+    } else {
+      clearRubySessionCookie();
+    }
+  }, [hasHydrated, token]);
+
+  return null;
+}

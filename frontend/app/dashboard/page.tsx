@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { GroupInsightsPanel } from "@/components/dashboard/group-insights-panel";
-import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useRubyLogout } from "@/hooks/use-ruby-logout";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRubyEventsWs } from "@/hooks/use-ruby-events-ws";
@@ -458,9 +457,5 @@ function DashboardInner() {
 }
 
 export default function RubyDashboardPage() {
-  return (
-    <ProtectedRoute>
-      <DashboardInner />
-    </ProtectedRoute>
-  );
+  return <DashboardInner />;
 }

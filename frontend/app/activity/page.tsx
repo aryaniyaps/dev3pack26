@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useRubyEventsWs } from "@/hooks/use-ruby-events-ws";
 import { fetchChainEvents, type ChainEvent } from "@/lib/ruby-api";
 
@@ -117,9 +116,5 @@ function ActivityInner() {
 }
 
 export default function ActivityPage() {
-  return (
-    <ProtectedRoute>
-      <ActivityInner />
-    </ProtectedRoute>
-  );
+  return <ActivityInner />;
 }

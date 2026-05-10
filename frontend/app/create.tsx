@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   buildCreateGroupInstruction,
@@ -176,9 +175,5 @@ function CreateInner() {
 }
 
 export default function CreatePage() {
-  return (
-    <ProtectedRoute>
-      <CreateInner />
-    </ProtectedRoute>
-  );
+  return <CreateInner />;
 }

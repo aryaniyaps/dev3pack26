@@ -1,6 +1,7 @@
 "use client";
 
 import { SolanaProvider } from "@solana/react-hooks";
+import { SessionCookieSync } from "@/components/auth/session-cookie-sync";
 import { PrivyProvider } from "@/providers/privy-provider";
 import { PropsWithChildren } from "react";
 
@@ -17,6 +18,7 @@ const client = createClient({
 export function Providers({ children }: PropsWithChildren) {
   return (
     <PrivyProvider>
+      <SessionCookieSync />
       <SolanaProvider client={client}>
         {children}
       </SolanaProvider>
