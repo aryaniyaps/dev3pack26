@@ -1,3 +1,5 @@
+import { useAuthStore } from "@/stores/auth-store";
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   `${process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080"}/api/v1`;
@@ -7,12 +9,15 @@ function apiInit(extra: RequestInit = {}): RequestInit {
     extra.headers && typeof extra.headers === "object" && !Array.isArray(extra.headers)
       ? (extra.headers as Record<string, string>)
       : {};
+  const bearer =
+    typeof window !== "undefined" ? useAuthStore.getState().sessionToken : null;
   return {
     credentials: "include",
     ...extra,
     headers: {
       "Content-Type": "application/json",
       ...extraHeaders,
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
     },
   };
 }

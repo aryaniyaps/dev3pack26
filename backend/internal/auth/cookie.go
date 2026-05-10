@@ -7,18 +7,20 @@ import (
 	"github.com/dev3pack/ruby/backend/internal/config"
 )
 
-// ReadSessionToken returns the Ruby session JWT from the HttpOnly cookie, or from
-// Authorization: Bearer as a fallback (e.g. tests, scripts).
+// ReadSessionToken returns the Ruby session JWT. Prefer Authorization: Bearer first so
+// cross-site SPAs still work when third-party cookies are blocked; HttpOnly cookie remains best-effort.
 func ReadSessionToken(r *http.Request, cfg *config.Config) string {
+	authz := r.Header.Get("Authorization")
+	if strings.HasPrefix(authz, "Bearer ") {
+		if v := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer ")); v != "" {
+			return v
+		}
+	}
 	name := SessionCookieName(cfg)
 	if c, err := r.Cookie(name); err == nil {
 		if v := strings.TrimSpace(c.Value); v != "" {
 			return v
 		}
-	}
-	authz := r.Header.Get("Authorization")
-	if strings.HasPrefix(authz, "Bearer ") {
-		return strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
 	}
 	return ""
 }

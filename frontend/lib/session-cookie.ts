@@ -1,6 +1,6 @@
 /**
- * Lightweight cookie so Next.js middleware can gate routes alongside the HttpOnly
- * Ruby session cookie from the API. Must stay in sync with {@link SessionCookieSync}.
+ * First-party hint for Next proxy (`ruby_authed`). The real session is the HttpOnly
+ * `ruby_session` on the API host and/or the Ruby session JWT in the client (Bearer).
  */
 export const RUBY_SESSION_COOKIE = "ruby_authed";
 

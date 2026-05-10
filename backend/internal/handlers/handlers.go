@@ -193,6 +193,7 @@ func (h *Handler) VerifyPhantomAuth(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, h.Config, token)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"principal": principal,
+		"token":     token, // Ruby session JWT (same as cookie); use when cross-site cookies are dropped
 	})
 }
 
@@ -222,6 +223,7 @@ func (h *Handler) VerifyPrivyAuth(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, h.Config, token)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"principal": principal,
+		"token":     token, // Ruby session JWT (same as cookie); use when cross-site cookies are dropped
 	})
 }
 

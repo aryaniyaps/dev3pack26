@@ -9,9 +9,9 @@ const API_BASE_URL =
   `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080'}/api/v1`;
 
 /**
- * Ruby sessions use an HttpOnly `ruby_session` cookie set by the API on verify.
- * Zustand persists principal + UI hints (`auth-storage`); API calls use `credentials: "include"`.
- * If `/auth/me` fails for network/CORS reasons, keep local principal until the server returns 401/403.
+ * Ruby sessions: API sets HttpOnly `ruby_session` and returns the same JWT as `token` on verify.
+ * Browsers often block that cookie on cross-site requests (Vercel → Render), so we persist
+ * `sessionToken` and send `Authorization: Bearer` on every API call; the server prefers Bearer first.
  */
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -32,6 +32,8 @@ interface AuthPrincipal {
 }
 
 interface AuthState {
+  /** Ruby-issued session JWT (HS256), not the Privy token. */
+  sessionToken: string | null;
   walletAddress: string | null;
   email: string | null;
   principal: AuthPrincipal | null;
@@ -55,6 +57,8 @@ type AuthStore = AuthState & AuthActions;
 
 type AuthSessionResponse = {
   principal: AuthPrincipal;
+  /** Same value as HttpOnly ruby_session cookie; required when cookies are blocked cross-site. */
+  token?: string;
 };
 
 type PhantomNonceResponse = {
@@ -123,12 +127,14 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     init.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
       ? (init.headers as Record<string, string>)
       : {};
+  const bearer = useAuthStore.getState().sessionToken;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...extraHeaders,
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
     },
   });
 
@@ -169,6 +175,7 @@ async function verifyPhantomAuth(payload: {
 
 function sessionState(session: AuthSessionResponse, email?: string | null) {
   return {
+    sessionToken: session.token ?? null,
     principal: session.principal,
     walletAddress: session.principal.wallet_address || null,
     email: email ?? null,
@@ -233,6 +240,7 @@ async function signWithLocalDevWallet() {
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
+      sessionToken: null,
       walletAddress: null,
       email: null,
       principal: null,
@@ -309,6 +317,7 @@ export const useAuthStore = create<AuthStore>()(
           const sessionRejected = status === 401 || status === 403;
           if (sessionRejected) {
             set({
+              sessionToken: null,
               principal: null,
               walletAddress: null,
               email: null,
@@ -337,6 +346,7 @@ export const useAuthStore = create<AuthStore>()(
           // Local logout should still clear stale or already-revoked sessions.
         }
         set({
+          sessionToken: null,
           walletAddress: null,
           email: null,
           principal: null,
@@ -353,11 +363,14 @@ export const useAuthStore = create<AuthStore>()(
       name: 'auth-storage',
       merge: (persistedState, currentState) => {
         const p = (persistedState ?? {}) as Partial<AuthState & { token?: string | null }>;
-        const { token: _legacyToken, ...rest } = p;
+        const { token: legacyRubyJWT, ...rest } = p;
         const merged = {
           ...currentState,
           ...rest,
         };
+        if (!merged.sessionToken && typeof legacyRubyJWT === 'string' && legacyRubyJWT) {
+          merged.sessionToken = legacyRubyJWT;
+        }
         if (merged.principal) {
           merged.isAuthenticated = true;
         }
@@ -368,6 +381,7 @@ export const useAuthStore = create<AuthStore>()(
         void state?.refreshSession({ silent: true });
       },
       partialize: (state) => ({
+        sessionToken: state.sessionToken,
         walletAddress: state.walletAddress,
         email: state.email,
         principal: state.principal,
