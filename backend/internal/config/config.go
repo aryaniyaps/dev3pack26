@@ -55,7 +55,8 @@ func Load() *Config {
 		PrivyAppID:           os.Getenv("PRIVY_APP_ID"),
 		PrivyIssuer:          envOrDefault("PRIVY_ISSUER", "https://auth.privy.io"),
 		PrivyJWKSURL:         os.Getenv("PRIVY_JWKS_URL"),
-		PrivyVerificationKey: os.Getenv("PRIVY_VERIFICATION_KEY"),
+		// Privy dashboard / one-line env pastes often use literal \n; PEM must contain real newlines.
+		PrivyVerificationKey: normalizePEMEnv(os.Getenv("PRIVY_VERIFICATION_KEY")),
 		AuthDomain:         envOrDefault("AUTH_DOMAIN", "localhost:3000"),
 		BlinkBaseURL:       envOrDefault("BLINK_BASE_URL", "http://localhost:3000/blinks"),
 		AgentAutoRun:       envBool("AGENT_AUTO_RUN", false),
@@ -69,6 +70,13 @@ func Load() *Config {
 		KaminoAPYBps:       envInt64("KAMINO_APY_BPS", 750),
 		JitoAPYBps:         envInt64("JITO_APY_BPS", 620),
 	}
+}
+
+func normalizePEMEnv(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.ReplaceAll(s, "\\n", "\n")
 }
 
 func envOrDefault(key, fallback string) string {

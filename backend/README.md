@@ -73,10 +73,11 @@ make services-down
 | `AUTH_SESSION_TTL_MINUTES` | Session expiry in minutes |
 | `AUTH_DOMAIN` | Domain embedded in Phantom sign-in challenge |
 | `BLINK_BASE_URL` | Base URL for generated blink links |
-| `PRIVY_APP_ID` | Privy app ID (JWT audience) |
-| `PRIVY_ISSUER` | Privy JWT issuer |
-| `PRIVY_JWKS_URL` | Privy JWKS endpoint (RS256 tokens) |
-| `PRIVY_VERIFICATION_KEY` | PEM EC public key from Privy Dashboard (ES256 access / identity tokens) |
+| `PRIVY_APP_ID` | Privy app ID (JWT `aud` must include this) |
+| `PRIVY_ISSUER` | Expected JWT issuer (default `https://auth.privy.io`; `privy.io` also accepted) |
+| `PRIVY_JWKS_URL` | **Recommended:** `https://auth.privy.io/api/v1/apps/<APP_ID>/jwks.json` — Ruby verifies ES256 access tokens against rotating EC keys from JWKS when this is set (takes precedence over static PEM). |
+| `PRIVY_VERIFICATION_KEY` | Optional static ES256 PEM when not using JWKS; use real newlines or literal `\\n` in env. |
+| `PRIVY_APP_SECRET` | Optional; Privy app **secret** for server-side Privy APIs only — **never** put this in `NEXT_PUBLIC_*` or the frontend. |
 | `AGENT_AUTO_RUN` | Enables periodic treasury agent runs |
 | `AGENT_INTERVAL_SECONDS` | Scheduler interval for auto agent runs |
 | `RUBY_PROGRAM_ID` | Anchor `ruby_protocol` program ID |

@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -44,11 +46,10 @@ type Principal struct {
 	ExpiresAt     time.Time `json:"expires_at"`
 }
 
+// privyClaims must not duplicate RegisteredClaims JSON tags (e.g. sub, aud) — that breaks decoding.
 type privyClaims struct {
-	Sub           string `json:"sub"`
-	Audience      any    `json:"aud"`
-	WalletAddress string `json:"wallet_address,omitempty"`
 	jwt.RegisteredClaims
+	WalletAddress string `json:"wallet_address,omitempty"`
 }
 
 func NewService(cfg *config.Config, db *bun.DB) *Service {
@@ -152,7 +153,7 @@ func (s *Service) VerifyPrivyToken(privyToken string) (*Principal, string, error
 
 	alg, err := jwtHeaderAlg(privyToken)
 	if err != nil {
-		return nil, "", errors.New("invalid privy token")
+		return nil, "", errors.New("malformed privy jwt (expected three base64url segments)")
 	}
 
 	var claims *privyClaims
@@ -174,7 +175,7 @@ func (s *Service) VerifyPrivyToken(privyToken string) (*Principal, string, error
 		return nil, "", err
 	}
 
-	return s.issueSession(context.Background(), claims.Sub, claims.WalletAddress, "privy")
+	return s.issueSession(context.Background(), claims.Subject, claims.WalletAddress, "privy")
 }
 
 func jwtHeaderAlg(tokenString string) (string, error) {
@@ -198,10 +199,19 @@ func jwtHeaderAlg(tokenString string) (string, error) {
 }
 
 func (s *Service) verifyPrivyES256Claims(tokenString string) (*privyClaims, error) {
+	jwksURL := strings.TrimSpace(s.cfg.PrivyJWKSURL)
 	pemStr := strings.TrimSpace(s.cfg.PrivyVerificationKey)
-	if pemStr == "" {
-		return nil, errors.New("PRIVY_VERIFICATION_KEY is required for Privy ES256 tokens (copy from Privy Dashboard → App settings → Verification key)")
+	// Prefer JWKS when set: Privy rotates signing keys; app JWKS includes current EC keys.
+	if jwksURL != "" {
+		return s.verifyPrivyES256WithJWKS(tokenString)
 	}
+	if pemStr != "" {
+		return s.verifyPrivyES256WithPEM(tokenString, pemStr)
+	}
+	return nil, errors.New("set PRIVY_JWKS_URL (recommended) or PRIVY_VERIFICATION_KEY for ES256 Privy tokens")
+}
+
+func (s *Service) verifyPrivyES256WithPEM(tokenString, pemStr string) (*privyClaims, error) {
 	key, err := jwt.ParseECPublicKeyFromPEM([]byte(pemStr))
 	if err != nil {
 		return nil, fmt.Errorf("invalid PRIVY_VERIFICATION_KEY: %w", err)
@@ -214,7 +224,47 @@ func (s *Service) verifyPrivyES256Claims(tokenString string) (*privyClaims, erro
 		return key, nil
 	})
 	if err != nil {
-		return nil, errors.New("invalid privy token")
+		switch {
+		case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+			return nil, errors.New("privy jwt signature invalid: check PRIVY_VERIFICATION_KEY matches your Privy app (PEM must include real newlines or \\n in env)")
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return nil, errors.New("privy token expired")
+		default:
+			return nil, fmt.Errorf("privy jwt invalid: %w", err)
+		}
+	}
+	return claims, nil
+}
+
+func (s *Service) verifyPrivyES256WithJWKS(tokenString string) (*privyClaims, error) {
+	claims := &privyClaims{}
+	_, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+		if t.Method.Alg() != jwt.SigningMethodES256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
+		}
+		kid, _ := t.Header["kid"].(string)
+		if strings.TrimSpace(kid) == "" {
+			return nil, errors.New("missing kid in jwt header (required for JWKS verification)")
+		}
+		key, err := s.privyJWKPublicKeyForKID(kid)
+		if err != nil {
+			return nil, err
+		}
+		pub, ok := key.(*ecdsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("expected EC public key from JWKS for ES256, got %T", key)
+		}
+		return pub, nil
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+			return nil, errors.New("privy jwt signature invalid (JWKS ES256): check PRIVY_JWKS_URL and that PRIVY_APP_ID matches the issuing app")
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return nil, errors.New("privy token expired")
+		default:
+			return nil, fmt.Errorf("privy jwt invalid (JWKS ES256): %w", err)
+		}
 	}
 	return claims, nil
 }
@@ -222,14 +272,32 @@ func (s *Service) verifyPrivyES256Claims(tokenString string) (*privyClaims, erro
 func (s *Service) verifyPrivyRS256Claims(tokenString string) (*privyClaims, error) {
 	claims := &privyClaims{}
 	_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
+		if token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+		}
 		kid, _ := token.Header["kid"].(string)
 		if strings.TrimSpace(kid) == "" {
 			return nil, errors.New("missing kid")
 		}
-		return s.fetchJWKPublicKey(kid)
+		key, err := s.privyJWKPublicKeyForKID(kid)
+		if err != nil {
+			return nil, err
+		}
+		pub, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("expected RSA public key from JWKS for RS256, got %T", key)
+		}
+		return pub, nil
 	})
 	if err != nil {
-		return nil, errors.New("invalid privy token")
+		switch {
+		case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+			return nil, errors.New("privy jwt signature invalid (RS256): check PRIVY_JWKS_URL and token kid")
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return nil, errors.New("privy token expired")
+		default:
+			return nil, fmt.Errorf("privy jwt invalid (RS256): %w", err)
+		}
 	}
 	return claims, nil
 }
@@ -238,13 +306,25 @@ func validatePrivyClaims(claims *privyClaims, appID, configuredIssuer string) er
 	if !privyIssuerOK(claims.Issuer, configuredIssuer) {
 		return errors.New("invalid privy issuer")
 	}
-	if !containsAudience(claims.Audience, appID) {
-		return errors.New("privy token audience mismatch")
+	if !audienceContainsPrivyApp(claims.Audience, appID) {
+		return errors.New("privy token audience mismatch (aud must include PRIVY_APP_ID)")
 	}
-	if strings.TrimSpace(claims.Sub) == "" {
+	if strings.TrimSpace(claims.Subject) == "" {
 		return errors.New("missing subject in privy token")
 	}
 	return nil
+}
+
+func audienceContainsPrivyApp(aud jwt.ClaimStrings, appID string) bool {
+	if appID == "" {
+		return false
+	}
+	for _, a := range aud {
+		if a == appID {
+			return true
+		}
+	}
+	return false
 }
 
 func privyIssuerOK(iss, configured string) bool {
@@ -254,9 +334,9 @@ func privyIssuerOK(iss, configured string) bool {
 	if iss == configured {
 		return true
 	}
-	// Current Privy access / identity JWTs commonly use issuer "privy.io".
+	// Privy access tokens use iss "privy.io"; some flows use auth host.
 	switch iss {
-	case "privy.io", "https://privy.io":
+	case "privy.io", "https://privy.io", "https://auth.privy.io":
 		return true
 	default:
 		return false
@@ -351,7 +431,20 @@ func (s *Service) issueSession(ctx context.Context, userID, wallet, provider str
 	}, signed, nil
 }
 
-func (s *Service) fetchJWKPublicKey(kid string) (*rsa.PublicKey, error) {
+// privyJWK matches Privy's JWKS document (EC P-256 for ES256 and optionally RSA for RS256).
+type privyJWK struct {
+	Kid string `json:"kid"`
+	Kty string `json:"kty"`
+	Crv string `json:"crv"`
+	X   string `json:"x"`
+	Y   string `json:"y"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+	Alg string `json:"alg"`
+	Use string `json:"use"`
+}
+
+func (s *Service) fetchPrivyJWKSKeys() ([]privyJWK, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.cfg.PrivyJWKSURL, nil)
 	if err != nil {
 		return nil, err
@@ -361,42 +454,79 @@ func (s *Service) fetchJWKPublicKey(kid string) (*rsa.PublicKey, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("privy jwks: http %s", resp.Status)
+	}
 	var payload struct {
-		Keys []struct {
-			Kid string `json:"kid"`
-			Kty string `json:"kty"`
-			N   string `json:"n"`
-			E   string `json:"e"`
-		} `json:"keys"`
+		Keys []privyJWK `json:"keys"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
+	return payload.Keys, nil
+}
 
-	for _, k := range payload.Keys {
-		if k.Kid != kid || k.Kty != "RSA" {
+func (s *Service) privyJWKPublicKeyForKID(kid string) (any, error) {
+	keys, err := s.fetchPrivyJWKSKeys()
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range keys {
+		if k.Kid != kid {
 			continue
 		}
-		nb, err := base64.RawURLEncoding.DecodeString(k.N)
-		if err != nil {
-			return nil, err
+		switch k.Kty {
+		case "EC":
+			if k.Crv != "P-256" {
+				return nil, fmt.Errorf("unsupported EC curve %q in JWKS", k.Crv)
+			}
+			xb, err := base64.RawURLEncoding.DecodeString(k.X)
+			if err != nil || len(xb) == 0 {
+				return nil, fmt.Errorf("invalid EC JWK x: %w", err)
+			}
+			yb, err := base64.RawURLEncoding.DecodeString(k.Y)
+			if err != nil || len(yb) == 0 {
+				return nil, fmt.Errorf("invalid EC JWK y: %w", err)
+			}
+			curve := elliptic.P256()
+			x := new(big.Int).SetBytes(xb)
+			y := new(big.Int).SetBytes(yb)
+			if !curve.IsOnCurve(x, y) {
+				return nil, errors.New("EC JWK point not on P-256 curve")
+			}
+			return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		case "RSA":
+			if k.N == "" || k.E == "" {
+				return nil, errors.New("invalid RSA JWK: missing n or e")
+			}
+			nb, err := base64.RawURLEncoding.DecodeString(k.N)
+			if err != nil {
+				return nil, err
+			}
+			eb, err := base64.RawURLEncoding.DecodeString(k.E)
+			if err != nil {
+				return nil, err
+			}
+			n := new(big.Int).SetBytes(nb)
+			e := int(new(big.Int).SetBytes(eb).Int64())
+			return &rsa.PublicKey{N: n, E: e}, nil
+		default:
+			return nil, fmt.Errorf("unsupported JWKS kty %q", k.Kty)
 		}
-		eb, err := base64.RawURLEncoding.DecodeString(k.E)
-		if err != nil {
-			return nil, err
-		}
-		n := new(big.Int).SetBytes(nb)
-		e := int(new(big.Int).SetBytes(eb).Int64())
-		return &rsa.PublicKey{N: n, E: e}, nil
 	}
-	return nil, errors.New("kid not found in JWKS")
+	return nil, errors.New("kid not found in Privy JWKS")
 }
 
 func containsAudience(raw any, expected string) bool {
 	switch v := raw.(type) {
 	case string:
 		return v == expected
+	case jwt.ClaimStrings:
+		for _, item := range v {
+			if item == expected {
+				return true
+			}
+		}
 	case []any:
 		for _, item := range v {
 			if s, ok := item.(string); ok && s == expected {

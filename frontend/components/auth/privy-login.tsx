@@ -68,15 +68,17 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
     }
 
     const readTokensWithoutRefresh = async (): Promise<string | null> => {
-      let id = identityTokenRef.current;
-      if (!id) {
-        id = (await getIdentityToken()) ?? null;
-      }
-      if (!id) {
-        id = (await getAccessToken()) ?? null;
-      }
+      // Prefer access token first: Ruby verifies the same ES256 access JWT Privy documents for backends.
+      // Identity tokens can differ; sending them first caused signature failures when only the access key is configured.
+      let id = (await getAccessToken()) ?? null;
       if (!id) {
         id = (await getPrivyCustomerAccessToken()) ?? null;
+      }
+      if (!id) {
+        id = identityTokenRef.current;
+      }
+      if (!id) {
+        id = (await getIdentityToken()) ?? null;
       }
       return id;
     };

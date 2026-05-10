@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dev3pack/ruby/backend/internal/config"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestBeginPhantomLoginReturnsNonceAndMessage(t *testing.T) {
@@ -31,6 +32,18 @@ func TestContainsAudience(t *testing.T) {
 	}
 	if containsAudience([]string{"x", "y"}, "app-id") {
 		t.Fatal("expected mismatch for []string")
+	}
+	if !containsAudience(jwt.ClaimStrings{"x", "app-id"}, "app-id") {
+		t.Fatal("expected jwt.ClaimStrings audience to match")
+	}
+}
+
+func TestAudienceContainsPrivyApp(t *testing.T) {
+	if !audienceContainsPrivyApp(jwt.ClaimStrings{"cmabc", "cmxyz"}, "cmxyz") {
+		t.Fatal("expected ClaimStrings to match app id")
+	}
+	if audienceContainsPrivyApp(jwt.ClaimStrings{"other"}, "cmxyz") {
+		t.Fatal("expected mismatch")
 	}
 }
 
