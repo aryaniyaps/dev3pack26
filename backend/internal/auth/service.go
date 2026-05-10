@@ -50,6 +50,8 @@ type Principal struct {
 type privyClaims struct {
 	jwt.RegisteredClaims
 	WalletAddress string `json:"wallet_address,omitempty"`
+	// AppInstanceID is Privy claim "aid" (app id) when aud is https://auth.privy.io instead of the app id.
+	AppInstanceID string `json:"aid,omitempty"`
 }
 
 func NewService(cfg *config.Config, db *bun.DB) *Service {
@@ -306,13 +308,38 @@ func validatePrivyClaims(claims *privyClaims, appID, configuredIssuer string) er
 	if !privyIssuerOK(claims.Issuer, configuredIssuer) {
 		return errors.New("invalid privy issuer")
 	}
-	if !audienceContainsPrivyApp(claims.Audience, appID) {
-		return errors.New("privy token audience mismatch (aud must include PRIVY_APP_ID)")
+	if !privyTokenMatchesApp(claims, appID) {
+		return errors.New("privy token audience mismatch (aud must include PRIVY_APP_ID, or aud https://auth.privy.io with aid matching PRIVY_APP_ID)")
 	}
 	if strings.TrimSpace(claims.Subject) == "" {
 		return errors.New("missing subject in privy token")
 	}
 	return nil
+}
+
+// privyTokenMatchesApp accepts legacy tokens whose aud lists the app id, and current Privy access
+// tokens where aud is the auth service URL and claim "aid" is the Privy app id.
+func privyTokenMatchesApp(c *privyClaims, appID string) bool {
+	if strings.TrimSpace(appID) == "" {
+		return false
+	}
+	if audienceContainsPrivyApp(c.Audience, appID) {
+		return true
+	}
+	if strings.TrimSpace(c.AppInstanceID) != appID {
+		return false
+	}
+	return isPrivyAuthServiceAudience(c.Audience)
+}
+
+func isPrivyAuthServiceAudience(aud jwt.ClaimStrings) bool {
+	for _, a := range aud {
+		u := strings.TrimSuffix(strings.TrimSpace(a), "/")
+		if strings.EqualFold(u, "https://auth.privy.io") {
+			return true
+		}
+	}
+	return false
 }
 
 func audienceContainsPrivyApp(aud jwt.ClaimStrings, appID string) bool {

@@ -73,7 +73,7 @@ make services-down
 | `AUTH_SESSION_TTL_MINUTES` | Session expiry in minutes |
 | `AUTH_DOMAIN` | Domain embedded in Phantom sign-in challenge |
 | `BLINK_BASE_URL` | Base URL for generated blink links |
-| `PRIVY_APP_ID` | Privy app ID (JWT `aud` must include this) |
+| `PRIVY_APP_ID` | Privy app ID: must match JWT `aud` **or** claim `aid` when `aud` is `https://auth.privy.io` (current access tokens) |
 | `PRIVY_ISSUER` | Expected JWT issuer (default `https://auth.privy.io`; `privy.io` also accepted) |
 | `PRIVY_JWKS_URL` | **Recommended:** `https://auth.privy.io/api/v1/apps/<APP_ID>/jwks.json` — Ruby verifies ES256 access tokens against rotating EC keys from JWKS when this is set (takes precedence over static PEM). |
 | `PRIVY_VERIFICATION_KEY` | Optional static ES256 PEM when not using JWKS; use real newlines or literal `\\n` in env. |
